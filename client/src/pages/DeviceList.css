@@ -1,0 +1,116 @@
+.device-list-container {
+    padding: 20px;
+  }
+  
+  .device-list-container h1 {
+    margin-bottom: 20px;
+    color: #2c3e50;
+  }
+  
+  .device-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  
+  .device-table th,
+  .device-table td {
+    padding: 15px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .device-table th {
+    background-color: #f8f9fa;
+    font-weight: 600;
+    color: #343a40;
+  }
+  
+  .device-table tr:last-child td {
+    border-bottom: none;
+  }
+  
+  .device-table tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .status-badge {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 50px;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+  
+  .status-badge.online {
+    background-color: #e8f5e9;
+    color: #2E7D32;
+  }
+  
+  .status-badge.offline {
+    background-color: #ffebee;
+    color: #c62828;
+  }
+  
+  .device-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .no-devices {
+    background-color: white;
+    padding: 30px;
+    text-align: center;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    color: #6c757d;
+  }
+  
+  .loading-container,
+  .error-container {
+    padding: 30px;
+    text-align: center;
+    background-color: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  
+  .loading-container {
+    color: #3498db;
+  }
+  
+  .error-container {
+    color: #e74c3c;
+  }
+
+  /* Thêm vào cuối DeviceList.css */
+.device-table tr.selected {
+  background-color: rgba(52, 152, 219, 0.1);
+}
+
+.select-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background-color: #3498db;
+  color: white;
+  transition: all 0.2s;
+}
+
+.select-btn:hover:not(:disabled) {
+  background-color: #2980b9;
+}
+
+.select-btn.active {
+  background-color: #27ae60;
+}
+
+.select-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
