@@ -1,12 +1,12 @@
-const Device = require('../models/Device');
+const DeviceService = require('../services/DeviceService');
 
-// Lấy danh sách thiết bị
-exports.getDevices = async (req, res) => {
+// Lấy thông tin thiết bị duy nhất
+exports.getDevice = async (req, res) => {
   try {
-    const devices = await Device.find();
+    const device = await DeviceService.getDeviceInfo();
     res.json({
       success: true,
-      devices
+      device
     });
   } catch (error) {
     res.status(500).json({
@@ -16,19 +16,55 @@ exports.getDevices = async (req, res) => {
   }
 };
 
-// Lấy thông tin thiết bị cụ thể
-exports.getDevice = async (req, res) => {
+// Cập nhật thông tin thiết bị
+exports.updateDevice = async (req, res) => {
   try {
-    const device = await Device.findOne({ deviceId: req.params.deviceId });
-    if (!device) {
-      return res.status(404).json({
-        success: false,
-        error: 'Device not found'
-      });
-    }
+    const { name, description, location } = req.body;
+    const device = await DeviceService.updateDeviceInfo({
+      name,
+      description,
+      location
+    });
     
     res.json({
       success: true,
+      device
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+// Kiểm tra trạng thái thiết bị
+exports.getDeviceStatus = async (req, res) => {
+  try {
+    const isOnline = await DeviceService.isDeviceOnline();
+    const lastSeen = await DeviceService.getLastSeenTime();
+    
+    res.json({
+      success: true,
+      status: isOnline ? 'online' : 'offline',
+      lastSeen
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+// Reset tất cả điều khiển
+exports.resetControls = async (req, res) => {
+  try {
+    const device = await DeviceService.resetControls();
+    
+    res.json({
+      success: true,
+      message: 'Controls reset successfully',
       device
     });
   } catch (error) {

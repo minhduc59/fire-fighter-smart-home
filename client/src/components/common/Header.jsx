@@ -49,10 +49,6 @@ const Header = () => {
             <i className="fas fa-history" style={{marginRight:'5px'}}></i>
             <span>History</span>
           </Link>
-          <Link to="/devices" className={`nav-link ${location.pathname === '/devices' ? 'active' : ''}`}>
-            <i className="fas fa-server" style={{marginRight:'5px'}}></i>
-            <span>Device</span>
-          </Link>
         </nav>
       </div>
     </header>

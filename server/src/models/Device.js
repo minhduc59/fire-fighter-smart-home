@@ -1,14 +1,10 @@
 const mongoose = require('mongoose');
 
 const DeviceSchema = new mongoose.Schema({
-  deviceId: {
-    type: String,
-    required: true,
-    unique: true
-  },
   name: {
     type: String,
-    required: true
+    required: true,
+    default: 'ESP8266 FireGuard'
   },
   status: {
     type: String,
@@ -16,24 +12,43 @@ const DeviceSchema = new mongoose.Schema({
     default: 'offline'
   },
   controls: {
-    pump: {
+    fan: {
       type: Boolean,
       default: false
     },
-    servo: {
+    door: {
       type: Boolean,
       default: false
+    },
+    fireSuppression:{
+      bedroom: {
+        type: Boolean,
+        default: false
+      },
+      kitchen:{
+        type: Boolean,
+        default: false
+      },
+      all: {
+        type: Boolean,
+        default: false
+      }
     }
   },
   lastSeen: {
     type: Date,
     default: Date.now
+  },
+  description: {
+    type: String,
+    default: 'Fire monitoring and suppression system'
+  },
+  location: {
+    type: String,
+    default: 'Main Area'
   }
+}, {
+  timestamps: true // Tự động thêm createdAt và updatedAt
 });
 
 module.exports = mongoose.model('Device', DeviceSchema);
-
-// Chức năng xử lý thiết bị
-// Cập nhật trạng thái thiết bị (online/offline) - Khi một thiết bị kết nối hoặc ngắt kết nối, trạng thái sẽ được cập nhật
-// Điều khiển thiết bị - Bật/tắt bơm hoặc servo
-// Theo dõi thời gian hoạt động cuối cùng - Cập nhật thời gian lastSeen khi thiết bị gửi dữ liệu

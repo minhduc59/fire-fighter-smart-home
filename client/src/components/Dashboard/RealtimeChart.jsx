@@ -13,7 +13,6 @@ import {
 import socketService from '../../services/socketService';
 import './RealtimeChart.css';
 
-// Đăng ký các components cần thiết cho Chart.js
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -24,7 +23,7 @@ ChartJS.register(
   Legend
 );
 
-const RealtimeChart = ({ dataType, deviceId }) => {
+const RealtimeChart = ({ dataType }) => {
   const [chartData, setChartData] = useState({
     labels: [],
     datasets: [
@@ -39,7 +38,6 @@ const RealtimeChart = ({ dataType, deviceId }) => {
     ],
   });
 
-  // Giới hạn số điểm dữ liệu trên biểu đồ
   const MAX_DATA_POINTS = 10;
 
   function getLabel(type) {
@@ -61,35 +59,31 @@ const RealtimeChart = ({ dataType, deviceId }) => {
   }
 
   useEffect(() => {
-    // Kết nối Socket.IO
     socketService.connect();
     
-    // Xử lý nhận dữ liệu realtime
+    // Xử lý nhận dữ liệu realtime 
     const handleDataUpdate = (data) => {
-      if (data.deviceId === deviceId) {
-        const timestamp = new Date().toLocaleTimeString();
+      const timestamp = new Date().toLocaleTimeString();
+      
+      setChartData(prevData => {
+        const newLabels = [...prevData.labels, timestamp];
+        const newData = [...prevData.datasets[0].data, data[dataType]];
         
-        setChartData(prevData => {
-          const newLabels = [...prevData.labels, timestamp];
-          const newData = [...prevData.datasets[0].data, data[dataType]];
-          
-          // Giữ tối đa MAX_DATA_POINTS trên biểu đồ
-          if (newLabels.length > MAX_DATA_POINTS) {
-            newLabels.shift();
-            newData.shift();
-          }
-          
-          return {
-            labels: newLabels,
-            datasets: [
-              {
-                ...prevData.datasets[0],
-                data: newData,
-              }
-            ]
-          };
-        });
-      }
+        if (newLabels.length > MAX_DATA_POINTS) {
+          newLabels.shift();
+          newData.shift();
+        }
+        
+        return {
+          labels: newLabels,
+          datasets: [
+            {
+              ...prevData.datasets[0],
+              data: newData,
+            }
+          ]
+        };
+      });
     };
     
     socketService.on('data-update', handleDataUpdate);
@@ -97,7 +91,7 @@ const RealtimeChart = ({ dataType, deviceId }) => {
     return () => {
       socketService.off('data-update', handleDataUpdate);
     };
-  }, [deviceId, dataType]);
+  }, [dataType]);
 
   const options = {
     responsive: true,

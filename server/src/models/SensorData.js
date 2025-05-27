@@ -13,10 +13,6 @@ const SensorDataSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
-  deviceId: {
-    type: String,
-    required: true
-  },
   timestamp: {
     type: Date,
     default: Date.now
