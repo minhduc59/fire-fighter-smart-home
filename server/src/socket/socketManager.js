@@ -32,6 +32,14 @@ const setupSocketIO = (io) => {
       console.log(`Received sensor data:`, data);
 
       try {
+        // Nếu ESP8266 đánh dấu đây là dữ liệu khẩn cấp, ghi log nổi bật
+        if (data.emergency) {
+          console.log('⚠️⚠️⚠️ DỮ LIỆU KHẨN CẤP ĐƯỢC NHẬN TỪ ESP8266 ⚠️⚠️⚠️');
+          console.log(`Nhiệt độ: ${data.temperature}°C, Khí: ${data.gasLevel} ppm`);
+
+          // Bạn có thể kích hoạt các hành động ngay lập tức ở đây nếu cần
+        }
+
         // Lưu vào database
         const sensorData = new SensorData({
           temperature: data.temperature,
@@ -115,31 +123,31 @@ const setupSocketIO = (io) => {
             // 1. MỞ CỬA (Ưu tiên cao nhất - thoát hiểm)
             if (actions.door) {
               await DeviceService.updateControl('door', true);
-              esp8266Socket.emit('control', {
-                control: 'door',
-                value: true
-              });
+              // esp8266Socket.emit('control', {
+              //   control: 'door',
+              //   value: true
+              // });
               console.log('🚪 Door OPENED for emergency exit');
             }
 
             // 2. BẬT QUẠT (Thông gió, hút khói)
             if (actions.fan) {
               await DeviceService.updateControl('fan', true);
-              esp8266Socket.emit('control', {
-                control: 'fan',
-                value: true
-              });
+              // esp8266Socket.emit('control', {
+              //   control: 'fan',
+              //   value: true
+              // });
               console.log('🌪️ Fan ACTIVATED for ventilation');
             }
 
             // 3. KÍCH HOẠT HỆ THỐNG PHUN NƯỚC
             if (actions.fireSuppression) {
               await DeviceService.updateControl('fireSuppression', true, actions.fireSuppression);
-              esp8266Socket.emit('control', {
-                control: 'fireSuppression',
-                subControl: actions.fireSuppression,
-                value: true
-              });
+              // esp8266Socket.emit('control', {
+              //   control: 'fireSuppression',
+              //   subControl: actions.fireSuppression,
+              //   value: true
+              // });
 
               const locationText = actions.fireSuppression === 'all' ? 'CẢ HAI PHÒNG' :
                 actions.fireSuppression === 'bedroom' ? 'PHÒNG NGỦ' : 'PHÒNG BẾP';
