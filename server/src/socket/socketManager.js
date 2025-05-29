@@ -16,7 +16,6 @@ const setupSocketIO = (io) => {
       try {
         // Cập nhật trạng thái thiết bị trong DB
         const device = await DeviceService.updateStatus('online');
-
         // Thông báo cho tất cả clients
         io.emit('device-status', {
           status: 'online',
@@ -32,12 +31,154 @@ const setupSocketIO = (io) => {
       console.log(`Received sensor data:`, data);
 
       try {
-        // Nếu ESP8266 đánh dấu đây là dữ liệu khẩn cấp, ghi log nổi bật
+        // Khởi tạo mảng alerts và biến autoActivation
+        const alerts = [];
+        let autoActivation = null;
+
+        // Định nghĩa ngưỡng
+        const TEMP_THRESHOLD = 60;
+        const GAS_THRESHOLD = 300;
+
+        // Nếu ESP8266 đánh dấu đây là dữ liệu khẩn cấp, xử lý ngay
         if (data.emergency) {
           console.log('⚠️⚠️⚠️ DỮ LIỆU KHẨN CẤP ĐƯỢC NHẬN TỪ ESP8266 ⚠️⚠️⚠️');
           console.log(`Nhiệt độ: ${data.temperature}°C, Khí: ${data.gasLevel} ppm`);
 
-          // Bạn có thể kích hoạt các hành động ngay lập tức ở đây nếu cần
+          // Phân tích tình huống và xác định hành động
+          if (data.temperature >= TEMP_THRESHOLD && data.gasLevel >= GAS_THRESHOLD) {
+            // TRƯỜNG HỢP 1: Cả nhiệt độ và gas đều cao (Cháy nghiêm trọng)
+            alerts.push({ type: 'temperature', value: data.temperature });
+            alerts.push({ type: 'gas', value: data.gasLevel });
+
+            autoActivation = {
+              scenario: 'severe-fire',
+              description: 'Cháy nghiêm trọng - Cả nhiệt độ và khí gas đều cao',
+              actions: {
+                door: true,                    // Mở cửa thoát hiểm
+                fan: true,                     // Bật quạt thông gió
+                fireSuppression: 'all'         // Phun nước cả 2 phòng
+              }
+            };
+
+            console.log('🔥🔥 SEVERE FIRE DETECTED! Temp:', data.temperature, '°C, Gas:', data.gasLevel, 'ppm');
+
+          } else if (data.temperature >= TEMP_THRESHOLD && data.gasLevel < GAS_THRESHOLD) {
+            // TRƯỜNG HỢP 2: Chỉ nhiệt độ cao (Cháy ở phòng ngủ - ít khói)
+            alerts.push({ type: 'temperature', value: data.temperature });
+
+            autoActivation = {
+              scenario: 'bedroom-fire',
+              description: 'Cháy phòng ngủ - Nhiệt độ cao, ít khói',
+              actions: {
+                door: true,                    // Mở cửa thoát hiểm
+                fan: true,                     // Bật quạt thông gió
+                fireSuppression: 'bedroom'     // Phun nước phòng ngủ
+              }
+            };
+
+            console.log('🔥 BEDROOM FIRE DETECTED! Temp:', data.temperature, '°C (Low gas level)');
+
+          } else if (data.temperature < TEMP_THRESHOLD && data.gasLevel >= GAS_THRESHOLD) {
+            // TRƯỜNG HỢP 3: Chỉ gas cao (Rò gas/cháy âm ỉ ở bếp)
+            alerts.push({ type: 'gas', value: data.gasLevel });
+
+            autoActivation = {
+              scenario: 'kitchen-gas-leak',
+              description: 'Rò gas hoặc cháy âm ỉ ở bếp - Khí gas cao, nhiệt độ thấp',
+              actions: {
+                door: true,                    // Mở cửa thông gió
+                fan: true,                     // Bật quạt hút khí độc
+                fireSuppression: 'kitchen'     // Phun nước phòng bếp
+              }
+            };
+
+            console.log('💨 KITCHEN GAS LEAK DETECTED! Gas:', data.gasLevel, 'ppm (Normal temperature)');
+          }
+
+          // Thực thi hành động tự động nếu có
+          if (autoActivation && esp8266Socket) {
+            console.log(`🚨 AUTO-ACTIVATION: ${autoActivation.scenario.toUpperCase()}`);
+            console.log(`📋 Description: ${autoActivation.description}`);
+            console.log('🎯 Actions to execute:', autoActivation.actions);
+
+            try {
+              // Thực hiện các hành động theo thứ tự ưu tiên
+              const actions = autoActivation.actions;
+
+              // 1. MỞ CỬA (Ưu tiên cao nhất - thoát hiểm)
+              if (actions.door) {
+                await DeviceService.updateControl('door', true);
+                console.log('🚪 Door OPENED for emergency exit');
+              }
+
+              // 2. BẬT QUẠT (Thông gió, hút khói)
+              if (actions.fan) {
+                await DeviceService.updateControl('fan', true);
+                console.log('🌪️ Fan ACTIVATED for ventilation');
+              }
+
+              // 3. KÍCH HOẠT HỆ THỐNG PHUN NƯỚC
+              if (actions.fireSuppression) {
+                await DeviceService.updateControl('fireSuppression', true, actions.fireSuppression);
+                const locationText = actions.fireSuppression === 'all' ? 'CẢ HAI PHÒNG' :
+                  actions.fireSuppression === 'bedroom' ? 'PHÒNG NGỦ' : 'PHÒNG BẾP';
+                console.log(`🚿 Fire suppression system ACTIVATED: ${locationText}`);
+              }
+
+              // Thông báo cho frontend về tất cả thay đổi
+              io.emit('control-update', {
+                control: 'door',
+                value: true
+              });
+
+              io.emit('control-update', {
+                control: 'fan',
+                value: true
+              });
+
+              io.emit('control-update', {
+                control: 'fireSuppression',
+                subControl: actions.fireSuppression,
+                value: true
+              });
+
+              // Thêm thông báo tự động vào alerts
+              alerts.push({
+                type: 'auto-suppression',
+                scenario: autoActivation.scenario,
+                message: `🚨 KÍCH HOẠT TỰ ĐỘNG: ${autoActivation.description}`,
+                actions: {
+                  door: '🚪 Mở cửa thoát hiểm',
+                  fan: '🌪️ Bật quạt thông gió',
+                  fireSuppression: `🚿 Phun nước ${actions.fireSuppression === 'all' ? 'cả hai phòng' :
+                    actions.fireSuppression === 'bedroom' ? 'phòng ngủ' : 'phòng bếp'}`
+                }
+              });
+
+            } catch (error) {
+              console.error('❌ Error executing auto-activation:', error);
+              alerts.push({
+                type: 'system-error',
+                message: 'Lỗi khi kích hoạt hệ thống tự động!'
+              });
+            }
+          }
+
+          // Nếu ESP8266 đã hành động cục bộ, ghi nhận điều này
+          if (data.localActionTaken) {
+            console.log('🤖 ESP8266 đã thực hiện hành động cục bộ tại thiết bị');
+            alerts.push({
+              type: 'esp8266-action',
+              message: 'ESP8266 đã tự động ứng phó tại chỗ'
+            });
+          }
+        } else {
+          // Xử lý dữ liệu bình thường nếu không phải là khẩn cấp
+          // (có thể vẫn muốn kiểm tra ngưỡng ngay cả khi ESP không đánh dấu là khẩn cấp)
+          if (data.temperature >= TEMP_THRESHOLD || data.gasLevel >= GAS_THRESHOLD) {
+            console.log('⚠️ Cảnh báo: Giá trị cảm biến vượt ngưỡng nhưng chưa được ESP8266 đánh dấu là khẩn cấp');
+            // Có thể thêm logic xử lý ở đây nếu cần
+          }
         }
 
         // Lưu vào database
@@ -50,148 +191,6 @@ const setupSocketIO = (io) => {
 
         // Cập nhật lastSeen của thiết bị
         await DeviceService.updateStatus('online');
-
-        // Kiểm tra cảnh báo và áp dụng logic tự động
-        const alerts = [];
-        let autoActivation = null;
-
-        // Định nghĩa ngưỡng
-        const TEMP_THRESHOLD = 60;
-        const GAS_THRESHOLD = 300;
-
-        // Phân tích tình huống và xác định hành động
-        if (data.temperature >= TEMP_THRESHOLD && data.gasLevel >= GAS_THRESHOLD) {
-          // TRƯỜNG HỢP 1: Cả nhiệt độ và gas đều cao (Cháy nghiêm trọng)
-          alerts.push({ type: 'temperature', value: data.temperature });
-          alerts.push({ type: 'gas', value: data.gasLevel });
-
-          autoActivation = {
-            scenario: 'severe-fire',
-            description: 'Cháy nghiêm trọng - Cả nhiệt độ và khí gas đều cao',
-            actions: {
-              door: true,                    // Mở cửa thoát hiểm
-              fan: true,                     // Bật quạt thông gió
-              fireSuppression: 'all'         // Phun nước cả 2 phòng
-            }
-          };
-
-          console.log('🔥🔥 SEVERE FIRE DETECTED! Temp:', data.temperature, '°C, Gas:', data.gasLevel, 'ppm');
-
-        } else if (data.temperature >= TEMP_THRESHOLD && data.gasLevel < GAS_THRESHOLD) {
-          // TRƯỜNG HỢP 2: Chỉ nhiệt độ cao (Cháy ở phòng ngủ - ít khói)
-          alerts.push({ type: 'temperature', value: data.temperature });
-
-          autoActivation = {
-            scenario: 'bedroom-fire',
-            description: 'Cháy phòng ngủ - Nhiệt độ cao, ít khói',
-            actions: {
-              door: true,                    // Mở cửa thoát hiểm
-              fan: true,                     // Bật quạt thông gió
-              fireSuppression: 'bedroom'     // Phun nước phòng ngủ
-            }
-          };
-
-          console.log('🔥 BEDROOM FIRE DETECTED! Temp:', data.temperature, '°C (Low gas level)');
-
-        } else if (data.temperature < TEMP_THRESHOLD && data.gasLevel >= GAS_THRESHOLD) {
-          // TRƯỜNG HỢP 3: Chỉ gas cao (Rò gas/cháy âm ỉ ở bếp)
-          alerts.push({ type: 'gas', value: data.gasLevel });
-
-          autoActivation = {
-            scenario: 'kitchen-gas-leak',
-            description: 'Rò gas hoặc cháy âm ỉ ở bếp - Khí gas cao, nhiệt độ thấp',
-            actions: {
-              door: true,                    // Mở cửa thông gió
-              fan: true,                     // Bật quạt hút khí độc
-              fireSuppression: 'kitchen'     // Phun nước phòng bếp
-            }
-          };
-
-          console.log('💨 KITCHEN GAS LEAK DETECTED! Gas:', data.gasLevel, 'ppm (Normal temperature)');
-        }
-
-        // Thực thi hành động tự động nếu có
-        if (autoActivation && esp8266Socket) {
-          console.log(`🚨 AUTO-ACTIVATION: ${autoActivation.scenario.toUpperCase()}`);
-          console.log(`📋 Description: ${autoActivation.description}`);
-          console.log('🎯 Actions to execute:', autoActivation.actions);
-
-          try {
-            // Thực hiện các hành động theo thứ tự ưu tiên
-            const actions = autoActivation.actions;
-
-            // 1. MỞ CỬA (Ưu tiên cao nhất - thoát hiểm)
-            if (actions.door) {
-              await DeviceService.updateControl('door', true);
-              // esp8266Socket.emit('control', {
-              //   control: 'door',
-              //   value: true
-              // });
-              console.log('🚪 Door OPENED for emergency exit');
-            }
-
-            // 2. BẬT QUẠT (Thông gió, hút khói)
-            if (actions.fan) {
-              await DeviceService.updateControl('fan', true);
-              // esp8266Socket.emit('control', {
-              //   control: 'fan',
-              //   value: true
-              // });
-              console.log('🌪️ Fan ACTIVATED for ventilation');
-            }
-
-            // 3. KÍCH HOẠT HỆ THỐNG PHUN NƯỚC
-            if (actions.fireSuppression) {
-              await DeviceService.updateControl('fireSuppression', true, actions.fireSuppression);
-              // esp8266Socket.emit('control', {
-              //   control: 'fireSuppression',
-              //   subControl: actions.fireSuppression,
-              //   value: true
-              // });
-
-              const locationText = actions.fireSuppression === 'all' ? 'CẢ HAI PHÒNG' :
-                actions.fireSuppression === 'bedroom' ? 'PHÒNG NGỦ' : 'PHÒNG BẾP';
-              console.log(`🚿 Fire suppression system ACTIVATED: ${locationText}`);
-            }
-
-            // Thông báo cho frontend về tất cả thay đổi
-            io.emit('control-update', {
-              control: 'door',
-              value: true
-            });
-
-            io.emit('control-update', {
-              control: 'fan',
-              value: true
-            });
-
-            io.emit('control-update', {
-              control: 'fireSuppression',
-              subControl: actions.fireSuppression,
-              value: true
-            });
-
-            // Thêm thông báo tự động vào alerts
-            alerts.push({
-              type: 'auto-suppression',
-              scenario: autoActivation.scenario,
-              message: `🚨 KÍCH HOẠT TỰ ĐỘNG: ${autoActivation.description}`,
-              actions: {
-                door: '🚪 Mở cửa thoát hiểm',
-                fan: '🌪️ Bật quạt thông gió',
-                fireSuppression: `🚿 Phun nước ${actions.fireSuppression === 'all' ? 'cả hai phòng' :
-                  actions.fireSuppression === 'bedroom' ? 'phòng ngủ' : 'phòng bếp'}`
-              }
-            });
-
-          } catch (error) {
-            console.error('❌ Error executing auto-activation:', error);
-            alerts.push({
-              type: 'system-error',
-              message: 'Lỗi khi kích hoạt hệ thống tự động!'
-            });
-          }
-        }
 
         // Gửi dữ liệu và cảnh báo cho frontend
         io.emit('data-update', {
@@ -225,10 +224,8 @@ const setupSocketIO = (io) => {
 
           // Cập nhật trạng thái điều khiển trong DB
           await DeviceService.updateControl(control, value, subControl);
-
           // Thông báo cập nhật điều khiển cho tất cả clients
           io.emit('control-update', { control, value, subControl });
-
           console.log(`✅ Manual control executed: ${control}${subControl ? `.${subControl}` : ''} = ${value}`);
         } else {
           console.log("❌ ESP8266 not connected - Cannot execute control");
