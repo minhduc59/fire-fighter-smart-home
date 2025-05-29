@@ -5,15 +5,15 @@
 #include <ArduinoJson.h>
 #include <Servo.h>
 #include <DHT.h>
-#include <Wire.h>                    // Thêm thư viện Wire cho I2C
-#include <LiquidCrystal_I2C.h>       // Thêm thư viện LCD I2C
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 
 // Thông tin WiFi
-const char* ssid = "tang 4";
-const char* password = "99999999";
+const char* ssid = "PT";
+const char* password = "123456789@";
 
 // Địa chỉ máy chủ Socket.IO
-const char* serverIP = "192.168.2.85";
+const char* serverIP = "192.168.81.139";
 const uint16_t serverPort = 5000;
 
 // Cấu hình chân
@@ -29,31 +29,31 @@ Servo servo1;  // D5 - GPIO14 (cửa)
 Servo servo2;  // D6 - GPIO12 (bơm phòng bếp)
 ESP8266WiFiMulti wifiMulti;
 SocketIOclient socketIO;
-LiquidCrystal_I2C lcd(0x27, 16, 2); // Địa chỉ I2C thường là 0x27 hoặc 0x3F, 16x2 LCD
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
 // Biến toàn cục
 float temperature = 0, humidity = 0;
 int gasValue = 0;
 bool isConnected = false;
 
+// Biến trạng thái cho hệ thống phun nước "all"
+bool isFireSuppressionAllActive = false;
+unsigned long fireSuppressionStartTime = 0;
+bool servoToggle = true;
+unsigned long lastServoToggleTime = 0;
+
 unsigned long lastSensorRead = 0;
 unsigned long lastDataSend = 0;
 unsigned long lastReconnectAttempt = 0;
 unsigned long lastHeapCheck = 0;
-unsigned long lastLCDUpdate = 0;    // Thời gian cập nhật LCD
+unsigned long lastLCDUpdate = 0;
 
-
-
-// Add this function to your ESP8266 code
 void checkEmergencyConditions() {
-  // Define thresholds directly on ESP8266 to match server thresholds
   const float TEMP_THRESHOLD = 60.0;
   const int GAS_THRESHOLD = 300;
-  
   bool tempAlert = temperature >= TEMP_THRESHOLD;
   bool gasAlert = gasValue >= GAS_THRESHOLD;
   
-  // Show alert on LCD if emergency detected
   if (tempAlert || gasAlert) {
     lcd.clear();
     lcd.setCursor(0, 0);
@@ -65,19 +65,13 @@ void checkEmergencyConditions() {
       lcd.print("HIGH TEMP ALERT!");
     else
       lcd.print("GAS LEAK ALERT!");
-      
-    // Use LED or buzzer if available
-    // digitalWrite(BUZZER_PIN, HIGH);
   }
   
-  // Immediately send data if emergency detected, don't wait for timer
   if (tempAlert || gasAlert) {
     servo1.write(0);
     DynamicJsonDocument doc(512);
     JsonArray array = doc.to<JsonArray>();
-    
     array.add("sensor-data");
-    
     JsonObject sensorData = array.createNestedObject();
     sensorData["temperature"] = temperature;
     sensorData["humidity"] = humidity;
@@ -86,31 +80,18 @@ void checkEmergencyConditions() {
     sensorData["tempAlert"] = tempAlert;
     sensorData["gasAlert"] = gasAlert;
 
-     digitalWrite(RELAY2_PIN, HIGH); // Bật quạt
-  digitalWrite(RELAY1_PIN, HIGH); // Bật bơm
-
-  if (tempAlert && gasAlert) {
-
-
-    servo1.write(0);
-    // Luân phiên phun nước cả 2 phía như server làm
-    unsigned long startTime = millis();
-    bool toggle = true;
-    while (millis() - startTime < 10000) {
-      servo2.write(toggle ? 180 : 60); // qua lại giữa 2 vị trí
-      toggle = !toggle;
-      delay(1000);
+    digitalWrite(RELAY2_PIN, HIGH);
+    digitalWrite(RELAY1_PIN, HIGH);
+    if (tempAlert && gasAlert) {
+      servo1.write(0);
+      // Bật chế độ phun nước "all" tự động
+      startFireSuppressionAll();
+    } else if (tempAlert) {
+      servo2.write(180);
+    } else if (gasAlert) {
+      servo2.write(60);
     }
-    servo2.write(120); // về vị trí trung gian
-    digitalWrite(RELAY1_PIN, LOW);
-  } else if (tempAlert) {
-    servo2.write(180); // phòng ngủ
-  } else if (gasAlert) {
-    servo2.write(60);  // phòng bếp
-  }
 
-
-    
     String output;
     serializeJson(doc, output);
     socketIO.sendEVENT(output);
@@ -119,12 +100,60 @@ void checkEmergencyConditions() {
   }
 }
 
+// Hàm bắt đầu chế độ phun nước "all"
+void startFireSuppressionAll() {
+  isFireSuppressionAllActive = true;
+  fireSuppressionStartTime = millis();
+  lastServoToggleTime = millis();
+  servoToggle = true;
+  digitalWrite(RELAY1_PIN, HIGH);
+  servo2.write(180); // Bắt đầu với phòng ngủ
+  Serial.println("Đã BẬT hệ thống phun nước TẤT CẢ");
+  Serial.println("Phun nước phòng ngủ (180°)");
+}
 
+// Hàm dừng chế độ phun nước "all"
+void stopFireSuppressionAll() {
+  isFireSuppressionAllActive = false;
+  digitalWrite(RELAY1_PIN, LOW);
+  servo2.write(120); // Về vị trí trung gian
+  Serial.println("TẮT hệ thống phun nước TẤT CẢ");
+}
 
-// Hàm hiển thị dữ liệu lên LCD
+// Hàm xử lý chế độ phun nước "all" trong loop
+void handleFireSuppressionAll() {
+  if (!isFireSuppressionAllActive) return;
+  unsigned long currentTime = millis();
+  // Chuyển đổi servo mỗi 1 giây
+  if (currentTime - lastServoToggleTime >= 1000) {
+    servoToggle = !servoToggle;
+    if (servoToggle) {
+      servo2.write(180);
+      Serial.println("Phun nước phòng ngủ (180°)");
+    } else {
+      servo2.write(60);
+      Serial.println("Phun nước phòng bếp (60°)");
+    }
+    lastServoToggleTime = currentTime;
+  }
+}
+
 void updateLCD() {
+  // Nếu đang trong chế độ phun nước "all", hiển thị thông tin đặc biệt
+  if (isFireSuppressionAllActive) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("FIRE SUPPRESS ON");
+    lcd.setCursor(0, 1);
+    if (servoToggle) {
+      lcd.print("-> BEDROOM");
+    } else {
+      lcd.print("-> KITCHEN");
+    }
+    return;
+  }
+  
   lcd.clear();
-  // Dòng 1: Nhiệt độ và độ ẩm
   lcd.setCursor(0, 0);
   lcd.print("T:");
   lcd.print(temperature, 1);
@@ -132,18 +161,15 @@ void updateLCD() {
   lcd.print(humidity, 1);
   lcd.print("%");
   
-  // Dòng 2: Giá trị khí gas
   lcd.setCursor(0, 1);
   lcd.print("Gas:");
   lcd.print(gasValue);
 }
 
-// Hàm hỗ trợ cho Socket.IO
 String serialized(const String& msg) {
   return String(msg);
 }
 
-// Gửi sự kiện device-connect khi kết nối thành công
 void sendDeviceConnectEvent() {
   DynamicJsonDocument doc(512);
   JsonArray array = doc.to<JsonArray>();
@@ -157,7 +183,6 @@ void sendDeviceConnectEvent() {
   isConnected = true;
 }
 
-// Xử lý các sự kiện từ server
 void handleSocketEvent(uint8_t * payload, size_t length) {
   DynamicJsonDocument doc(512);
   DeserializationError error = deserializeJson(doc, payload, length);
@@ -172,7 +197,6 @@ void handleSocketEvent(uint8_t * payload, size_t length) {
   Serial.print("Nhận sự kiện: ");
   Serial.println(eventName);
   
-  // Xử lý sự kiện control
   if (eventName == "control") {
     JsonObject data = doc[1];
     String control = data["control"];
@@ -183,7 +207,6 @@ void handleSocketEvent(uint8_t * payload, size_t length) {
     Serial.print(" -> ");
     Serial.println(value ? "BẬT" : "TẮT");
     
-    // Xử lý các lệnh điều khiển
     if (control == "fan") {
       digitalWrite(RELAY2_PIN, value ? HIGH : LOW);
       Serial.println(value ? "Đã BẬT quạt" : "Đã TẮT quạt");
@@ -202,43 +225,16 @@ void handleSocketEvent(uint8_t * payload, size_t length) {
       }
       else if (subControl == "kitchen") {
         servo2.write(value ? 60 : 120);
-         digitalWrite(RELAY1_PIN, value ? HIGH : LOW);
+        digitalWrite(RELAY1_PIN, value ? HIGH : LOW);
         Serial.println(value ? "Đã BẬT hệ thống phun nước phòng bếp" : "Đã TẮT hệ thống phun nước phòng bếp");
       }
       else if (subControl == "all") {
-  if (value) {
-    digitalWrite(RELAY1_PIN, HIGH);
-    Serial.println("Đã BẬT hệ thống phun nước TẤT CẢ");
-
-    // Luân phiên quay servo qua lại giữa 180 và 60 độ trong 10 giây
-    unsigned long startTime = millis();
-    bool toggle = true;
-
-    while (millis() - startTime < 10000) { // 10 giây
-      if (toggle) {
-        servo2.write(180);
-        Serial.println("Phun nước phòng ngủ (180°)");
-      } else {
-        servo2.write(60);
-        Serial.println("Phun nước phòng bếp (60°)");
+        if (value) {
+          startFireSuppressionAll();
+        } else {
+          stopFireSuppressionAll();
+        }
       }
-
-      toggle = !toggle;
-      delay(1000); // Chờ 1 giây mỗi lần chuyển
-    }
-
-    // Sau khi xong thì tắt relay và đưa servo về vị trí trung gian
-    digitalWrite(RELAY1_PIN, LOW);
-    servo2.write(120);
-    Serial.println("TẮT hệ thống phun nước TẤT CẢ");
-
-  } else {
-    digitalWrite(RELAY1_PIN, LOW);
-    servo2.write(120);
-    Serial.println("TẮT hệ thống phun nước TẤT CẢ");
-  }
-}
-
     }
   }
 }
@@ -279,7 +275,6 @@ void socketIOEvent(socketIOmessageType_t type, uint8_t * payload, size_t length)
   }
 }
 
-// Hàm gửi dữ liệu cảm biến lên server
 void sendSensorData() {
   if (!isConnected) {
     Serial.println("Không gửi dữ liệu - Chưa kết nối đến server");
@@ -369,21 +364,17 @@ void readSensors() {
 void setup() {
   Serial.begin(115200);
   
-  // Khởi tạo LCD
-  Wire.begin();          // Khởi tạo giao tiếp I2C
+  Wire.begin();
   lcd.begin(16, 2);
-  lcd.backlight();     // Bật đèn nền
+  lcd.backlight();
   lcd.setCursor(0, 0);
   lcd.print("Initializing...");
   
-  // Khởi tạo DHT
   dht.begin();
   
-  // Khởi tạo servo
   servo1.attach(14);
   servo2.attach(12);
   
-  // Khởi tạo relay
   pinMode(RELAY1_PIN, OUTPUT);
   digitalWrite(RELAY1_PIN, LOW);
   
@@ -393,7 +384,6 @@ void setup() {
   servo1.write(90);
   servo2.write(60);
   
-  // Kết nối WiFi
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   
@@ -434,18 +424,20 @@ void setup() {
   Serial.print("Bộ nhớ trống: ");
   Serial.println(ESP.getFreeHeap());
   
-  delay(2000); // Đợi hiển thị thông tin kết nối
-  updateLCD(); // Cập nhật LCD với dữ liệu cảm biến ban đầu
+  delay(2000);
+  updateLCD();
 }
 
 void loop() {
   unsigned long currentMillis = millis();
   static unsigned long lastSocketLoop = 0;
 
+  // Xử lý chế độ phun nước "all" nếu đang hoạt động
+  handleFireSuppressionAll();
 
   if (currentMillis - lastSensorRead > 2000) {
     readSensors();
-    checkEmergencyConditions(); // Add this line to check and send alerts
+    checkEmergencyConditions();
     lastSensorRead = currentMillis;
   }
   
@@ -459,17 +451,11 @@ void loop() {
     lastReconnectAttempt = currentMillis;
   }
   
-  if (currentMillis - lastSensorRead > 2000) {
-    readSensors();
-    lastSensorRead = currentMillis;
-  }
-  
   if (currentMillis - lastDataSend > 15000 && isConnected) {
     sendSensorData();
     lastDataSend = currentMillis;
   }
   
-  // Cập nhật LCD mỗi 5 giây
   if (currentMillis - lastLCDUpdate > 5000) {
     updateLCD();
     lastLCDUpdate = currentMillis;
@@ -504,6 +490,10 @@ void loop() {
       digitalWrite(RELAY2_PIN, HIGH);
     } else if (cmd == "RELAY2_OFF") {
       digitalWrite(RELAY2_PIN, LOW);
+    } else if (cmd == "FIRE_ALL_START") {
+      startFireSuppressionAll();
+    } else if (cmd == "FIRE_ALL_STOP") {
+      stopFireSuppressionAll();
     }
   }
   
