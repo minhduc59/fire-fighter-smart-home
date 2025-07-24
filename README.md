@@ -1,47 +1,48 @@
-# Hệ Thống Nhà Thông Minh Chống Cháy - Hướng Dẫn Cài Đặt
 
-Một hệ thống phát hiện và dập cháy thông minh được xây dựng bằng **ESP8266**, **Node.js**, **React** và **MongoDB**.
+# 🔥 Smart Fire Safety Home System – Installation Guide
 
-# 🔥 Tổng Quan
+An intelligent fire detection and suppression system built using **ESP8266**, **Node.js**, **React**, and **MongoDB**.
 
-Dự án này phát hiện nguy cơ cháy bằng cảm biến khí gas và nhiệt độ, và tự động kích hoạt các cơ chế an toàn như hệ thống phun nước và quạt thông gió. Hệ thống cũng bao gồm giao diện React để giám sát thời gian thực và điều khiển thủ công.
+## 🔍 Overview
 
-# 📦 Các Thành Phần Hệ Thống
+This project detects fire hazards through gas and temperature sensors and automatically activates safety mechanisms such as water pumps and ventilation fans. It also includes a React-based interface for real-time monitoring and manual control.
 
-- **ESP8266 NodeMCU**: Giám sát cảm biến và điều khiển thiết bị
-- **Máy chủ Node.js**: Xử lý dữ liệu cảm biến và đưa ra phản ứng
-- **Giao diện React**: Hiển thị dữ liệu và điều khiển hệ thống
-- **MongoDB**: Lưu trữ dữ liệu lịch sử
+## 📦 System Components
 
-# 🔧 Yêu Cầu Phần Cứng
+- **ESP8266 NodeMCU**: Monitors sensors and controls devices  
+- **Node.js Server**: Handles sensor data and system responses  
+- **React Interface**: Displays real-time data and allows control  
+- **MongoDB**: Stores historical sensor data
+
+## 🔧 Hardware Requirements
 
 - ESP8266 NodeMCU  
-- Cảm biến DHT22 (nhiệt độ & độ ẩm)  
-- Cảm biến khí gas MQ2  
-- 2 Động cơ servo (điều khiển cửa & hướng vòi phun)  
-- 2 Relay module (điều khiển quạt & máy bơm)  
-- Màn hình LCD I2C 16x2  
-- Dây nối, breadboard  
-- Nguồn điện 5V  
+- DHT22 sensor (temperature & humidity)  
+- MQ2 gas sensor  
+- 2 Servo motors (for door & nozzle control)  
+- 2 Relay modules (for fan & water pump control)  
+- 16x2 I2C LCD display  
+- Jumper wires, breadboard  
+- 5V power supply  
 
-# 🖥️ Sơ Đồ Kết Nối
+## 🖥️ Wiring Diagram
 
 - D2 / GPIO2  → DHT22  
-- D5 / GPIO14 → Servo 1 (Cửa)  
-- D6 / GPIO12 → Servo 2 (Vòi phun)  
-- D7 / GPIO13 → Relay 1 (Máy bơm nước)  
-- D8 / GPIO15 → Relay 2 (Quạt)  
+- D5 / GPIO14 → Servo 1 (Door)  
+- D6 / GPIO12 → Servo 2 (Nozzle)  
+- D7 / GPIO13 → Relay 1 (Water pump)  
+- D8 / GPIO15 → Relay 2 (Fan)  
 - A0         → MQ2  
 - D1 / GPIO5 → LCD SCL  
 - D2 / GPIO4 → LCD SDA  
 
-# ⚙️ Cài Đặt & Thiết Lập
+## ⚙️ Installation & Setup
 
-## 1. ESP8266
+### 1. ESP8266
 
-- Cài đặt Arduino IDE  
-- Thêm board ESP8266 trong Board Manager  
-- Cài các thư viện sau:
+- Install **Arduino IDE**  
+- Add the **ESP8266 board** via Board Manager  
+- Install the following libraries:
 
 ```
 ESP8266WiFi  
@@ -54,7 +55,7 @@ Wire
 LiquidCrystal_I2C  
 ```
 
-- Mở file `ESP.ino` và cấu hình WiFi và địa chỉ IP máy chủ:
+- Open `ESP.ino` and configure WiFi and server IP:
 
 ```cpp
 const char* ssid = "your-wifi-ssid";  
@@ -62,122 +63,122 @@ const char* password = "your-wifi-password";
 const char* serverIP = "your-server-ip";  
 ```
 
-- Nạp chương trình vào ESP8266
+- Upload the code to the ESP8266
 
-## 2. MongoDB
+### 2. MongoDB
 
-- Tải tại: https://www.mongodb.com/try/download/community  
-- Khởi động:
+- Download: https://www.mongodb.com/try/download/community  
+- Start the database:
 
 ```bash
-mongod --dbpath /đường/dẫn/tới/thư_mục_data
+mongod --dbpath /path/to/your/data_folder
 ```
 
-## 3. Máy chủ Node.js
+### 3. Node.js Server
 
 ```bash
 cd server
 npm install
 ```
 
-- Cấu hình `.env`:
+- Create a `.env` file:
 
 ```
 PORT=5000  
 MONGO_URI=mongodb://localhost:27017/iot_monitoring  
 ```
 
-- Chạy server:
+- Start the server:
 
 ```bash
 npm run start
 ```
 
-- Phát triển với hot reload:
+- For development with hot reload:
 
 ```bash
 npm run dev
 ```
 
-## 4. Giao Diện React
+### 4. React Client
 
 ```bash
 cd client
 npm install
 ```
 
-- Cấu hình `.env`:
+- Create a `.env` file:
 
 ```
 REACT_APP_SOCKET_URL=http://localhost:5000  
 REACT_APP_API_URL=http://localhost:5000/api  
 ```
 
-- Chạy giao diện:
+- Run the React app:
 
 ```bash
 npm start
 ```
 
-# 🧪 Kiểm Tra Hệ Thống
+## 🧪 System Testing
 
-## Mô Phỏng ESP8266
+### Simulate ESP8266
 
-Nếu không có phần cứng:
+If no hardware is available:
 
 ```bash
 cd server  
 node esp8266_simulator.js  
 ```
 
-## Tình Huống Giả Lập Cháy
+### Simulated Fire Scenarios
 
-- **Nhiệt độ cao + khí gas cao** → cháy toàn diện  
-- **Chỉ nhiệt độ cao** → có thể cháy phòng ngủ  
-- **Chỉ khí gas cao** → có thể rò rỉ khí gas trong bếp  
+- **High temperature + high gas** → full fire alert  
+- **High temperature only** → possible bedroom fire  
+- **High gas only** → possible gas leak in kitchen  
 
-# 👨‍💻 Hướng Dẫn Sử Dụng
+## 👨‍💻 User Guide
 
-## Bảng Điều Khiển Chính
+### Main Dashboard
 
-- Hiển thị nhiệt độ, độ ẩm, gas hiện tại  
-- Biểu đồ thời gian thực  
-- Nút điều khiển quạt, cửa, chữa cháy  
-- Cảnh báo nguy hiểm  
+- Displays current temperature, humidity, and gas levels  
+- Real-time chart updates  
+- Control buttons for fan, door, and fire suppression  
+- Hazard alerts  
 
-## Điều Khiển Thủ Công
+### Manual Controls
 
-- **Quạt**: Bật thông gió  
-- **Cửa**: Mở lối thoát  
-- **Chữa cháy**: Phun nước theo khu vực  
+- **Fan**: Activate ventilation  
+- **Door**: Open escape path  
+- **Fire Suppression**: Activate water pump by zone  
 
-## Lịch Sử Dữ Liệu
+### Historical Data
 
-- Xem lại dữ liệu cảm biến theo loại: nhiệt độ, độ ẩm, khí gas  
-- Lọc theo thời gian  
+- View past sensor data by type: temperature, humidity, gas  
+- Filter by time range  
 
-# 🚨 Phản Ứng Khi Gặp Sự Cố
+## 🚨 Emergency Response Workflow
 
-- ESP8266 phản ứng cục bộ ngay lập tức  
-- Gửi dữ liệu kèm cờ khẩn cấp về máy chủ  
-- Máy chủ xử lý và ra quyết định phản ứng  
-- Giao diện web hiển thị cảnh báo & trạng thái thiết bị  
+- ESP8266 reacts immediately to hazards locally  
+- Sends data and emergency flags to the server  
+- Server processes and decides on response actions  
+- Web interface displays real-time alerts and device status  
 
-# 🛠️ Khắc Phục Sự Cố
+## 🛠️ Troubleshooting
 
-## ESP8266
+### ESP8266
 
-- Kiểm tra thông tin WiFi  
-- Kiểm tra địa chỉ IP máy chủ  
-- Mở Serial Monitor để xem log  
+- Check WiFi credentials  
+- Verify server IP  
+- Open Serial Monitor to view logs  
 
-## Máy chủ
+### Server
 
-- Kiểm tra MongoDB đã chạy  
-- Xem log lỗi  
-- Kiểm tra tường lửa chặn cổng  
+- Ensure MongoDB is running  
+- Check error logs  
+- Verify firewall isn’t blocking the port  
 
-## Giao diện React
+### React Interface
 
-- Kiểm tra file `.env` đúng URL  
-- Mở DevTools → Console để xem lỗi
+- Ensure `.env` contains correct URLs  
+- Open DevTools → Console to check for errors  
